@@ -1,5 +1,13 @@
-const { createUser, loginUser } = require("../models/users.model");
+const {
+  createUser,
+  loginUser,
+  getUserById,
+  updatePassword,
+} = require("../models/users.model");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
+const pool = require("../../db/conn");
+const { nanoid } = require("nanoid");
 
 const createUserController = async (req, res) => {
   try {
@@ -58,9 +66,27 @@ const loginUserController = async (req, res) => {
       expiresIn: "1h",
     });
 
+    const refreshToken = jwt.sign({ sub: user.id }, process.env.REFRESH_TOKEN, {
+      expiresIn: "7d",
+    });
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+      [nanoid(11), user.id, tokenHash, expiresAt],
+    );
+
     return res.status(200).json({
       message: "Login successful",
       accessToken,
+      refreshToken,
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -71,4 +97,54 @@ const loginUserController = async (req, res) => {
   }
 };
 
-module.exports = { createUserController, loginUserController };
+const getUserByIdController = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const result = await getUserById(id);
+
+    if (!result) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (id != result.id) {
+      return res.status(403).json({
+        message: "Unauthorized",
+      });
+    }
+
+    return res.status(200).json({
+      user: result,
+    });
+  } catch (err) {
+    console.error("Get user error:", err);
+
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
+const updatePasswordController = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const { password } = req.body;
+
+    const result = await updatePassword(id, password);
+
+    return res.status(200).json({ message: result });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
+module.exports = {
+  createUserController,
+  loginUserController,
+  getUserByIdController,
+  updatePasswordController,
+};

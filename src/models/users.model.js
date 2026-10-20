@@ -51,7 +51,7 @@ const createUser = async (
   };
 };
 
-// getting existing user
+// login existing user
 const loginUser = async (email, password) => {
   const normalizeEmail = email.trim().toLowerCase();
   const selectUser = `SELECT id, password_hash FROM users 
@@ -79,4 +79,37 @@ const loginUser = async (email, password) => {
   };
 };
 
-module.exports = { createUser, loginUser };
+//get user details by id
+
+const getUserById = async (id) => {
+  const getUserQuery = "SELECT id, f_name, l_name from users where id=$1";
+  const result = await pool.query(getUserQuery, [id]);
+  if (result.rows.length === 0) {
+    return "User not found";
+  }
+  return result.rows[0];
+};
+
+const updatePassword = async (id, password) => {
+  const getUser = "SELECT id FROM users WHERE id = $1";
+  const getUserResult = await pool.query(getUser, [id]);
+
+  if (getUserResult.rows.length === 0) {
+    return "User not found";
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const updateUserQuery = `
+    UPDATE users
+    SET password_hash = $1,
+        updated_at = NOW()
+    WHERE id = $2
+  `;
+
+  await pool.query(updateUserQuery, [passwordHash, id]);
+
+  return "Password updated successfully";
+};
+
+module.exports = { createUser, loginUser, getUserById, updatePassword };
