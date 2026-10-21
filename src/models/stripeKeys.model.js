@@ -45,18 +45,30 @@ const updateWebhook = async (tenant_id, secret_key, webhook_key) => {
   const query = `
     UPDATE stripe_keys
     SET
-      secret_key_encrypted = encode(pgp_sym_encrypt($2, $3), 'base64'),
-      webhook_secret_encrypted = encode(pgp_sym_encrypt($4, $5), 'base64')
+      secret_key_encrypted = CASE
+        WHEN $2::text IS NOT NULL
+        THEN encode(pgp_sym_encrypt($2, $3), 'base64')
+        ELSE secret_key_encrypted
+      END,
+      webhook_secret_encrypted = CASE
+        WHEN $4::text IS NOT NULL
+        THEN encode(pgp_sym_encrypt($4, $5), 'base64')
+        ELSE webhook_secret_encrypted
+      END,
+      updated_at = NOW()
     WHERE tenant_id = $1
+    RETURNING id, tenant_id, updated_at
   `;
+
   const result = await pool.query(query, [
     tenant_id,
-    secret_key,
+    secret_key || null,
     process.env.STRIPE_ENCRYPTION_KEY,
-    webhook_key,
+    webhook_key || null,
     process.env.WEBHOOK_ENCRYPTION_KEY,
   ]);
-  return result.rows[0];
+
+  return result.rows[0] || null;
 };
 
 const getWebhookConfig = async (webhook_id) => {

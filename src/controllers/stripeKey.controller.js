@@ -1,4 +1,7 @@
-const { createStripeKeys } = require("../models/stripeKeys.model");
+const {
+  createStripeKeys,
+  updateWebhook,
+} = require("../models/stripeKeys.model");
 
 const createStripeKeysController = async (req, res) => {
   try {
@@ -38,9 +41,9 @@ const updateWebhookController = async (req, res) => {
     const tenant_id = req.user.tenant_id;
     const { secret_key, webhook_key } = req.body;
 
-    if (!secret_key || !webhook_key) {
+    if (!secret_key && !webhook_key) {
       return res.status(400).json({
-        message: "Stripe secret key and webhook secret are required",
+        message: "Provide at least one: secret_key or webhook_key",
       });
     }
 

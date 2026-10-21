@@ -1,4 +1,4 @@
-const { pool } = require("../../db/conn");
+const pool = require("../../db/conn");
 const { nanoid } = require("nanoid");
 
 const createWebhookEvent = async ({
@@ -15,7 +15,7 @@ const createWebhookEvent = async ({
         tenant_id,
         stripe_event_id,
         event_type,
-        payload,
+        payload
         )
         VALUES ($1,$2,$3,$4,$5)
         ON CONFLICT (tenant_id, stripe_event_id) DO NOTHING
