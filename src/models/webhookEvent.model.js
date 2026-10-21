@@ -35,4 +35,40 @@ const createWebhookEvent = async ({
   return result.rows[0] || null;
 };
 
-module.exports = { createWebhookEvent };
+const getTenantWebhooks = async (tenant_id, user_id) => {
+  const tenantWebhooks = `
+    SELECT id, stripe_event_id, event_type, received_at
+    FROM webhook_events
+    WHERE tenant_id = $1
+      AND EXISTS (
+        SELECT 1
+        FROM users
+        WHERE users.id = $2
+          AND users.tenant_id = webhook_events.tenant_id
+      )
+    ORDER BY received_at DESC
+  `;
+
+  const result = await pool.query(tenantWebhooks, [tenant_id, user_id]);
+  return result.rows || [];
+};
+
+const getWebhookById = async (id, tenant_id, user_id) => {
+  const getWebhookQuery = `
+    SELECT id, stripe_event_id, event_type, payload, processing_status, received_at
+    FROM webhook_events
+    WHERE id = $1
+      AND tenant_id = $2
+      AND EXISTS (
+        SELECT 1
+        FROM users
+        WHERE users.id = $3
+          AND users.tenant_id = webhook_events.tenant_id
+      )
+  `;
+
+  const result = await pool.query(getWebhookQuery, [id, tenant_id, user_id]);
+  return result.rows[0] || null;
+};
+
+module.exports = { createWebhookEvent, getTenantWebhooks, getWebhookById };

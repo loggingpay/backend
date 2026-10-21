@@ -8,6 +8,8 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const pool = require("../../db/conn");
 const { nanoid } = require("nanoid");
+const { createVerificationToken } = require("../models/verification.model");
+const { sendVerificationEmail } = require("../services/email.service");
 
 const createUserController = async (req, res) => {
   try {
@@ -40,6 +42,9 @@ const createUserController = async (req, res) => {
       });
     }
 
+    const verification = await createVerificationToken(user.id);
+    await sendVerificationEmail(email, verification.token);
+
     return res.status(201).json({
       message: "User created successfully",
       user_id: user.id,
@@ -53,6 +58,7 @@ const createUserController = async (req, res) => {
   }
 };
 
+// login user
 const loginUserController = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -68,6 +74,13 @@ const loginUserController = async (req, res) => {
     if (typeof user === "string") {
       return res.status(401).json({
         message: user,
+      });
+    }
+
+    // check if the user is active or not
+    if (user.status === "inactive") {
+      return res.status(403).json({
+        message: "Your account is inactive, please contact support!",
       });
     }
 
@@ -111,6 +124,7 @@ const loginUserController = async (req, res) => {
   }
 };
 
+//specific user id
 const getUserByIdController = async (req, res) => {
   try {
     const id = req.user.id;
@@ -140,6 +154,7 @@ const getUserByIdController = async (req, res) => {
   }
 };
 
+//update user password
 const updatePasswordController = async (req, res) => {
   try {
     const id = req.user.id;
