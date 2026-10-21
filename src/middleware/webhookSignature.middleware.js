@@ -1,5 +1,5 @@
 const Stripe = require("stripe");
-const { getWebhookSecret } = require("../models/stripeKey.model");
+const { getWebhookConfig } = require("../models/stripeKeys.model");
 
 const webhookSignatureMiddleware = async (req, res, next) => {
   try {
@@ -12,9 +12,9 @@ const webhookSignatureMiddleware = async (req, res, next) => {
       });
     }
 
-    const webhookSecret = await getWebhookSecret(webhook_id);
+    const config = await getWebhookConfig(webhook_id);
 
-    if (!webhookSecret) {
+    if (!config) {
       return res.status(404).json({
         message: "Webhook configuration not found",
       });
@@ -25,10 +25,11 @@ const webhookSignatureMiddleware = async (req, res, next) => {
     const event = stripe.webhooks.constructEvent(
       req.body,
       signature,
-      webhookSecret,
+      config.webhook_secret,
     );
 
     req.stripeEvent = event;
+    req.tenant_id = config.tenant_id;
 
     next();
   } catch (err) {
