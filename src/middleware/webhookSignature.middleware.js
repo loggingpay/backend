@@ -20,9 +20,7 @@ const webhookSignatureMiddleware = async (req, res, next) => {
       });
     }
 
-    const stripe = new Stripe(process.env.STRIPE_API_KEY);
-
-    const event = stripe.webhooks.constructEvent(
+    const event = Stripe.webhooks.constructEvent(
       req.body,
       signature,
       config.webhook_secret,
