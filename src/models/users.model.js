@@ -54,7 +54,7 @@ const createUser = async (
 // login existing user
 const loginUser = async (email, password) => {
   const normalizeEmail = email.trim().toLowerCase();
-  const selectUser = `SELECT id, tenant_id, password_hash FROM users 
+  const selectUser = `SELECT id, tenant_id, password_hash, status FROM users 
     WHERE 
     email_hash =  encode(
     hmac($1,$2, 'sha256'), 'hex')`;
@@ -76,6 +76,7 @@ const loginUser = async (email, password) => {
   return {
     id: user.id,
     tenant_id: user.tenant_id,
+    status: user.status,
   };
 };
 

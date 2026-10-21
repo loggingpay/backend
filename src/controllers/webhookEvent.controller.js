@@ -1,4 +1,8 @@
-const { createWebhookEvent } = require("../models/webhookEvent.model");
+const {
+  createWebhookEvent,
+  getTenantWebhooks,
+  getWebhookById,
+} = require("../models/webhookEvent.model");
 
 const receiveWebhook = async (req, res) => {
   try {
@@ -38,4 +42,45 @@ const receiveWebhook = async (req, res) => {
   }
 };
 
-module.exports = { receiveWebhook };
+const getTenantWebhooksController = async (req, res) => {
+  try {
+    const tenant_id = req.user.tenant_id;
+    const user_id = req.user.id;
+    const result = await getTenantWebhooks(tenant_id);
+    return res.status(200).json({
+      success: true,
+      webhooks: result,
+    });
+  } catch (err) {
+    console.error("Webhook storage error:", err.message);
+
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
+const getWebhookByIdController = async (req, res) => {
+  try {
+    const tenant_id = req.user.tenant_id;
+    const user_id = req.user.id;
+    const event_id = req.params.event_id;
+    const result = await getWebhookById(event_id, tenant_id);
+    return res.status(200).json({
+      success: true,
+      webhook: result,
+    });
+  } catch (err) {
+    console.error("Webhook storage error:", err.message);
+
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
+module.exports = {
+  receiveWebhook,
+  getTenantWebhooksController,
+  getWebhookByIdController,
+};
