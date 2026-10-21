@@ -16,6 +16,7 @@ const authenticateToken = (req, res, next) => {
 
     req.user = {
       id: decoded.userId,
+      tenant_id: decoded.tenant_id,
     };
 
     next();

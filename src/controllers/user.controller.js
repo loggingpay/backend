@@ -12,11 +12,19 @@ const { nanoid } = require("nanoid");
 const createUserController = async (req, res) => {
   try {
     const { f_name, l_name, email, password, tenantid, created_by } = req.body;
+
     if (!f_name || !l_name || !email || !password || !tenantid) {
       return res.status(400).json({
         message: "All fields are required",
       });
     }
+
+    if (tenantid !== req.user.tenant_id) {
+      return res.status(403).json({
+        message: "You are not authorized",
+      });
+    }
+
     const user = await createUser(
       f_name,
       l_name,
@@ -25,6 +33,7 @@ const createUserController = async (req, res) => {
       tenantid,
       created_by || null,
     );
+
     if (typeof user === "string") {
       return res.status(400).json({
         message: user,
@@ -37,9 +46,9 @@ const createUserController = async (req, res) => {
     });
   } catch (err) {
     console.log(err);
+
     return res.status(500).json({
       message: "Internal Server Error",
-      error: err,
     });
   }
 };
@@ -62,9 +71,14 @@ const loginUserController = async (req, res) => {
       });
     }
 
-    const accessToken = jwt.sign({ userId: user.id }, process.env.JWT_KEY, {
-      expiresIn: "1h",
-    });
+    const accessToken = jwt.sign(
+      {
+        userId: user.id,
+        tenant_id: user.tenant_id,
+      },
+      process.env.JWT_KEY,
+      { expiresIn: "1h" },
+    );
 
     const refreshToken = jwt.sign({ sub: user.id }, process.env.REFRESH_TOKEN, {
       expiresIn: "7d",
