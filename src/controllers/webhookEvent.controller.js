@@ -4,6 +4,8 @@ const {
   getWebhookById,
 } = require("../models/webhookEvent.model");
 
+const { createPaymentEvent } = require("../models/paymentEvents.model");
+
 const receiveWebhook = async (req, res) => {
   try {
     const event = req.stripeEvent;
@@ -14,6 +16,9 @@ const receiveWebhook = async (req, res) => {
       });
     }
 
+    console.log("Tenant ID:", req.tenant_id);
+    console.log("Tenant ID length:", req.tenant_id?.length);
+
     const result = await createWebhookEvent({
       tenant_id: req.tenant_id,
       stripe_event_id: event.id,
@@ -21,20 +26,47 @@ const receiveWebhook = async (req, res) => {
       payload: event,
     });
 
-    if (!result) {
-      return res.status(200).json({
-        received: true,
-        duplicate: true,
+    let paymentEventCreated = false;
+
+    if (event.type.startsWith("payment_intent.")) {
+      const payment = event.data?.object;
+      let payment_status = payment?.status ?? null;
+      if (event.type === "payment_intent.payment_failed") {
+        payment_status = "failed";
+      } else if (event.type === "payment_intent.canceled") {
+        payment_status = "canceled";
+      } else if (event.type === "payment_intent.succeeded") {
+        payment_status = "succeeded";
+      }
+
+      const paymentResult = await createPaymentEvent({
+        tenant_id: req.tenant_id,
+        stripe_event_id: event.id,
+        payment_intent_id: payment.id,
+        event_type: event.type,
+        amount: payment.amount ?? null,
+        currency: payment.currency ?? null,
+        payment_status,
+        metadata: payment.metadata ?? null,
       });
+      paymentEventCreated = Boolean(paymentResult);
     }
+
+    // if (!result) {
+    //   return res.status(200).json({
+    //     received: true,
+    //     duplicate: true,
+    //   });
+    // }
 
     return res.status(200).json({
       received: true,
-      duplicate: false,
-      event_id: result.id,
+      duplicate: !result,
+      paymentEventCreated: paymentEventCreated,
+      ...(result && { event_id: result.id }),
     });
   } catch (err) {
-    console.error("Webhook storage error:", err.message);
+    console.error("Webhook storage error:", err);
 
     return res.status(500).json({
       message: "Webhook event could not be stored",
@@ -45,7 +77,6 @@ const receiveWebhook = async (req, res) => {
 const getTenantWebhooksController = async (req, res) => {
   try {
     const tenant_id = req.user.tenant_id;
-    const user_id = req.user.id;
     const result = await getTenantWebhooks(tenant_id);
     return res.status(200).json({
       success: true,
@@ -63,7 +94,6 @@ const getTenantWebhooksController = async (req, res) => {
 const getWebhookByIdController = async (req, res) => {
   try {
     const tenant_id = req.user.tenant_id;
-    const user_id = req.user.id;
     const event_id = req.params.event_id;
     const result = await getWebhookById(event_id, tenant_id);
     return res.status(200).json({
