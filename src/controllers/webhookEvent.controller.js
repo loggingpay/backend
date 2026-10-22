@@ -2,6 +2,7 @@ const {
   createWebhookEvent,
   getTenantWebhooks,
   getWebhookById,
+  updateWebhookEventById,
 } = require("../models/webhookEvent.model");
 
 const { createPaymentEvent } = require("../models/paymentEvents.model");
@@ -10,15 +11,13 @@ const receiveWebhook = async (req, res) => {
   try {
     const event = req.stripeEvent;
 
+    console.log(event);
+
     if (!event) {
       return res.status(400).json({
         message: "Verified Stripe event not found",
       });
     }
-
-    console.log("Tenant ID:", req.tenant_id);
-    console.log("Tenant ID length:", req.tenant_id?.length);
-
     const result = await createWebhookEvent({
       tenant_id: req.tenant_id,
       stripe_event_id: event.id,
@@ -52,12 +51,9 @@ const receiveWebhook = async (req, res) => {
       paymentEventCreated = Boolean(paymentResult);
     }
 
-    // if (!result) {
-    //   return res.status(200).json({
-    //     received: true,
-    //     duplicate: true,
-    //   });
-    // }
+    if (result) {
+      await updateWebhookEventById(result.id);
+    }
 
     return res.status(200).json({
       received: true,
