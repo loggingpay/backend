@@ -71,4 +71,15 @@ const getWebhookById = async (id, tenant_id, user_id) => {
   return result.rows[0] || null;
 };
 
-module.exports = { createWebhookEvent, getTenantWebhooks, getWebhookById };
+const updateWebhookEventById = async (id) => {
+  const updateQuery = `UPDATE webhook_events SET processing_status = $1, processed_at = NOW() where id = $2 RETURNING id, processing_status, processed_at`;
+  const result = await pool.query(updateQuery, ["processed", id]);
+  return result.rows[0] || null;
+};
+
+module.exports = {
+  createWebhookEvent,
+  getTenantWebhooks,
+  getWebhookById,
+  updateWebhookEventById,
+};
