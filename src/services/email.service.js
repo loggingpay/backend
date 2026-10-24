@@ -5,7 +5,7 @@ const brevo = new BrevoClient({
 });
 
 const sendVerificationEmail = async (email, token) => {
-  const verificationUrl = `${process.env.APP_BASE_URL}/api/v1/verification/verify?token=${encodeURIComponent(token)}`;
+  const verificationUrl = `${process.env.APP_BASE_URL}/api/v1/verification?token=${encodeURIComponent(token)}`;
 
   const result = await brevo.transactionalEmails.sendTransacEmail({
     sender: {

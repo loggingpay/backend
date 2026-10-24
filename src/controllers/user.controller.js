@@ -90,7 +90,7 @@ const loginUserController = async (req, res) => {
         tenant_id: user.tenant_id,
       },
       process.env.JWT_KEY,
-      { expiresIn: "1h" },
+      { expiresIn: "15m" },
     );
 
     const refreshToken = jwt.sign({ sub: user.id }, process.env.REFRESH_TOKEN, {
@@ -110,10 +110,19 @@ const loginUserController = async (req, res) => {
       [nanoid(11), user.id, tokenHash, expiresAt],
     );
 
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     return res.status(200).json({
       message: "Login successful",
       accessToken,
-      refreshToken,
+      name: user.name,
+      email: user.email,
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -133,12 +142,6 @@ const getUserByIdController = async (req, res) => {
     if (!result) {
       return res.status(404).json({
         message: "User not found",
-      });
-    }
-
-    if (id != result.id) {
-      return res.status(403).json({
-        message: "Unauthorized",
       });
     }
 
@@ -171,9 +174,108 @@ const updatePasswordController = async (req, res) => {
   }
 };
 
+const refreshAccessTokenController = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: "Refresh token missing. Please log in again.",
+      });
+    }
+
+    let decoded;
+
+    try {
+      decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN);
+    } catch (err) {
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      });
+
+      return res.status(401).json({
+        message: "Refresh token expired or invalid. Please log in again.",
+      });
+    }
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+
+    const tokenResult = await pool.query(
+      `SELECT id
+       FROM refresh_tokens
+       WHERE user_id = $1
+         AND token_hash = $2
+         AND expires_at > NOW()
+       LIMIT 1`,
+      [decoded.sub, tokenHash],
+    );
+
+    if (tokenResult.rows.length === 0) {
+      res.clearCookie("refreshToken", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      });
+
+      return res.status(401).json({
+        message: "Refresh token is no longer valid. Please log in again.",
+      });
+    }
+
+    const userResult = await pool.query(
+      `SELECT id, tenant_id, status
+       FROM users
+       WHERE id = $1`,
+      [decoded.sub],
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        message: "User not found. Please log in again.",
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.status === "inactive") {
+      return res.status(403).json({
+        message: "Your account is inactive.",
+      });
+    }
+
+    const accessToken = jwt.sign(
+      {
+        userId: user.id,
+        tenant_id: user.tenant_id,
+      },
+      process.env.JWT_KEY,
+      { expiresIn: "15m" },
+    );
+
+    return res.status(200).json({
+      message: "Access token refreshed successfully",
+      accessToken,
+    });
+  } catch (err) {
+    console.error("Refresh token error:", err);
+
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+};
+
 module.exports = {
   createUserController,
   loginUserController,
   getUserByIdController,
+  refreshAccessTokenController,
   updatePasswordController,
 };

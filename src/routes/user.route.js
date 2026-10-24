@@ -10,11 +10,14 @@ router.post(
   userController.createUserController,
 );
 
+router.post("/refresh", userController.refreshAccessTokenController);
+
 router.get(
   "/my_details",
   authenticateToken,
   userController.getUserByIdController,
 );
+
 router.put(
   "/change-password",
   authenticateToken,

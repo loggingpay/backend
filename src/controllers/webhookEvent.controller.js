@@ -47,6 +47,7 @@ const receiveWebhook = async (req, res) => {
         currency: payment.currency ?? null,
         payment_status,
         metadata: payment.metadata ?? null,
+        payment_method: payment.payment_method_types?.[0] ?? null,
       });
       paymentEventCreated = Boolean(paymentResult);
     }
@@ -72,16 +73,63 @@ const receiveWebhook = async (req, res) => {
 
 const getTenantWebhooksController = async (req, res) => {
   try {
-    const tenant_id = req.user.tenant_id;
-    const result = await getTenantWebhooks(tenant_id);
+    const { tenant_id, id: user_id } = req.user;
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit, 10) || 50),
+    );
+
+    const { event_type, from, to } = req.query;
+
+    // Validate date format: YYYY-MM-DD
+    const isValidDate = (date) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      !Number.isNaN(Date.parse(date)) &&
+      new Date(`${date}T00:00:00.000Z`).toISOString().slice(0, 10) === date;
+
+    if (from && !isValidDate(from)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid 'from' date. Use YYYY-MM-DD.",
+      });
+    }
+
+    if (to && !isValidDate(to)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid 'to' date. Use YYYY-MM-DD.",
+      });
+    }
+
+    if (from && to && from > to) {
+      return res.status(400).json({
+        success: false,
+        message: "'from' date cannot be after 'to' date.",
+      });
+    }
+
+    const result = await getTenantWebhooks({
+      tenant_id,
+      user_id,
+      event_type,
+      from,
+      to,
+      page,
+      limit,
+    });
+
     return res.status(200).json({
       success: true,
-      webhooks: result,
+      webhooks: result.webhooks,
+      pagination: result.pagination,
     });
   } catch (err) {
-    console.error("Webhook storage error:", err.message);
+    console.error("Webhook fetch error:", err);
 
     return res.status(500).json({
+      success: false,
       message: "Internal Server Error",
     });
   }
@@ -90,14 +138,24 @@ const getTenantWebhooksController = async (req, res) => {
 const getWebhookByIdController = async (req, res) => {
   try {
     const tenant_id = req.user.tenant_id;
+    const user_id = req.user.id;
     const event_id = req.params.event_id;
-    const result = await getWebhookById(event_id, tenant_id);
+
+    const result = await getWebhookById(event_id, tenant_id, user_id);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Webhook event not found",
+      });
+    }
+
     return res.status(200).json({
       success: true,
       webhook: result,
     });
   } catch (err) {
-    console.error("Webhook storage error:", err.message);
+    console.error("Webhook storage error:", err);
 
     return res.status(500).json({
       message: "Internal Server Error",
