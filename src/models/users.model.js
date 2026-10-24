@@ -54,7 +54,12 @@ const createUser = async (
 // login existing user
 const loginUser = async (email, password) => {
   const normalizeEmail = email.trim().toLowerCase();
-  const selectUser = `SELECT id, tenant_id, password_hash, status FROM users 
+  const selectUser = `SELECT id, 
+  CONCAT(f_name, ' ', l_name)as full_name,  
+  pgp_sym_decrypt(
+    decode(email_encrypted, 'base64'),
+    $3::text
+) AS email, tenant_id, password_hash, status FROM users 
     WHERE 
     email_hash =  encode(
     hmac($1,$2, 'sha256'), 'hex')`;
@@ -62,6 +67,7 @@ const loginUser = async (email, password) => {
   const result = await pool.query(selectUser, [
     normalizeEmail,
     process.env.EMAIL_HASH_KEY,
+    process.env.EMAIL_ENCRYPTED_KEY,
   ]);
   if (result.rows.length == 0) {
     return "Invalid Email or Password";
@@ -76,6 +82,8 @@ const loginUser = async (email, password) => {
   return {
     id: user.id,
     tenant_id: user.tenant_id,
+    name: user.full_name,
+    email: user.email,
     status: user.status,
   };
 };
@@ -83,11 +91,27 @@ const loginUser = async (email, password) => {
 //get user details by id
 
 const getUserById = async (id) => {
-  const getUserQuery = "SELECT id, f_name, l_name from users where id=$1";
-  const result = await pool.query(getUserQuery, [id]);
+  const getUserQuery = `
+    SELECT
+      id,
+      CONCAT(f_name, ' ', l_name) AS name,
+      pgp_sym_decrypt(
+        decode(email_encrypted, 'base64'),
+        $2::text
+      ) AS email
+    FROM users
+    WHERE id = $1
+  `;
+
+  const result = await pool.query(getUserQuery, [
+    id,
+    process.env.EMAIL_ENCRYPTED_KEY,
+  ]);
+
   if (result.rows.length === 0) {
-    return "User not found";
+    return null;
   }
+
   return result.rows[0];
 };
 

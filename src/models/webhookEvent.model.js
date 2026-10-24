@@ -35,22 +35,84 @@ const createWebhookEvent = async ({
   return result.rows[0] || null;
 };
 
-const getTenantWebhooks = async (tenant_id, user_id) => {
-  const tenantWebhooks = `
-    SELECT id, stripe_event_id, event_type, received_at
+const getTenantWebhooks = async ({
+  tenant_id,
+  user_id,
+  event_type,
+  from,
+  to,
+  page = 1,
+  limit = 50,
+}) => {
+  const conditions = [
+    "webhook_events.tenant_id = $1",
+    `EXISTS (
+      SELECT 1
+      FROM users
+      WHERE users.id = $2
+        AND users.tenant_id = webhook_events.tenant_id
+    )`,
+  ];
+
+  const values = [tenant_id, user_id];
+
+  if (event_type) {
+    values.push(event_type);
+    conditions.push(`event_type = $${values.length}`);
+  }
+
+  if (from) {
+    values.push(from);
+    conditions.push(`received_at >= $${values.length}::date`);
+  }
+
+  if (to) {
+    values.push(to);
+    conditions.push(
+      `received_at < ($${values.length}::date + INTERVAL '1 day')`,
+    );
+  }
+
+  const whereClause = conditions.join(" AND ");
+
+  const countQuery = `
+    SELECT COUNT(*)::int AS total
     FROM webhook_events
-    WHERE tenant_id = $1
-      AND EXISTS (
-        SELECT 1
-        FROM users
-        WHERE users.id = $2
-          AND users.tenant_id = webhook_events.tenant_id
-      )
-    ORDER BY received_at DESC
+    WHERE ${whereClause}
   `;
 
-  const result = await pool.query(tenantWebhooks, [tenant_id, user_id]);
-  return result.rows || [];
+  const countResult = await pool.query(countQuery, values);
+  const total = countResult.rows[0].total;
+
+  const offset = (page - 1) * limit;
+  const dataValues = [...values, limit, offset];
+
+  const dataQuery = `
+    SELECT
+      id,
+      stripe_event_id,
+      event_type,
+      received_at,
+      processing_status,
+      processed_at
+    FROM webhook_events
+    WHERE ${whereClause}
+    ORDER BY received_at DESC
+    LIMIT $${values.length + 1}
+    OFFSET $${values.length + 2}
+  `;
+
+  const dataResult = await pool.query(dataQuery, dataValues);
+
+  return {
+    webhooks: dataResult.rows,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 };
 
 const getWebhookById = async (id, tenant_id, user_id) => {
